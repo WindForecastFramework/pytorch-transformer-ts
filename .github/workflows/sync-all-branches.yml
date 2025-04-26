@@ -5,6 +5,10 @@ on:
     - cron: '0 0 * * *'  # Daily at midnight
   workflow_dispatch:      # Manual trigger
 
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
   sync-all-branches:
     runs-on: ubuntu-latest
@@ -22,7 +26,7 @@ jobs:
       
       - name: Fetch All from Upstream
         run: |
-          git remote add upstream https://github.com/achenry/wind-forecasting.git
+          git remote add upstream https://github.com/boujuan/pytorch-transformer-ts.git
           git fetch upstream --prune
       
       - name: Get Branch List
@@ -31,9 +35,6 @@ jobs:
           BRANCHES=$(git branch -r | grep upstream | grep -v HEAD | sed 's/upstream\///' | xargs)
           echo "BRANCHES=$BRANCHES" >> $GITHUB_ENV
           echo "Found branches: $BRANCHES"
-      
-      - name: Set up GitHub CLI
-        uses: cli/setup-gh@v1
       
       - name: Create Sync PRs for Each Branch
         run: |
@@ -57,10 +58,12 @@ jobs:
             # Push the sync branch
             git push -f origin $SYNC_BRANCH
             
-            # Create PR if it doesn't exist
-            gh pr create --base $branch --head $SYNC_BRANCH \
-              --title "Sync $branch branch with upstream" \
-              --body "This PR syncs the $branch branch with the upstream repository." || echo "PR already exists or couldn't be created for $branch"
+            # Create PR if it doesn't exist using REST API instead of gh CLI
+            PR_DATA="{\"title\":\"Sync $branch branch with upstream\",\"body\":\"This PR syncs the $branch branch with the upstream repository.\",\"head\":\"$SYNC_BRANCH\",\"base\":\"$branch\"}"
+            curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                 -H "Accept: application/vnd.github.v3+json" \
+                 https://api.github.com/repos/${{ github.repository }}/pulls \
+                 -d "$PR_DATA" || echo "PR already exists or couldn't be created for $branch"
           done
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
